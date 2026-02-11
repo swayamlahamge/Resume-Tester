@@ -17,7 +17,7 @@
         <!-- Main Content -->
         <main class="main-content">
             <!-- Upload Section -->
-            <section class="upload-section">
+            <section class="upload-section" id="uploadSection">
                 <div class="upload-box">
                     <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -25,50 +25,56 @@
                         <line x1="12" y1="3" x2="12" y2="15"></line>
                     </svg>
                     <h2>Upload Your Resume</h2>
-                    <p>Drag and drop your PDF or click to browse</p>
-                    <input type="file" id="fileInput" accept=".pdf,.doc,.docx" hidden>
-                    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">Choose File</button>
-                </div>
-            </section>
-
-            <!-- Features Section -->
-            <section class="features-section">
-                <h2>What We Test</h2>
-                <div class="features-grid">
-                    <div class="feature-card">
-                        <div class="feature-icon">✓</div>
-                        <h3>ATS Compatibility</h3>
-                        <p>Ensure your resume passes Applicant Tracking Systems</p>
+                    <p>Upload your resume (PDF) and paste the job description</p>
+                    
+                    <div class="form-group">
+                        <label for="fileInput">Choose Resume (PDF only)</label>
+                        <input type="file" id="fileInput" accept=".pdf" required>
+                        <span id="fileName"></span>
                     </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">📊</div>
-                        <h3>Keyword Optimization</h3>
-                        <p>Check for relevant keywords and skills</p>
+                    
+                    <div class="form-group">
+                        <label for="jobDescription">Paste Job Description</label>
+                        <textarea id="jobDescription" placeholder="Paste the job description here..." rows="8" required></textarea>
                     </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">🎨</div>
-                        <h3>Formatting</h3>
-                        <p>Verify structure and readability</p>
-                    </div>
-                    <div class="feature-card">
-                        <div class="feature-icon">📈</div>
-                        <h3>Score Analysis</h3>
-                        <p>Get detailed insights and recommendations</p>
+                    
+                    <button class="btn btn-primary" onclick="analyzeResume()">Analyze Resume</button>
+                    <div id="loadingSpinner" class="loading-spinner" style="display: none;">
+                        <p>Analyzing your resume...</p>
                     </div>
                 </div>
             </section>
 
-            <!-- Stats Section -->
-            <section class="stats-section">
-                <div class="stat-item">
-                    <h3>95%</h3>
-                    <p>Success Rate</p>
-                </div>
-                <div class="stat-item">
-                    <h3>3x</h3>
-                    <p>Interview Rate Increase</p>
+            <!-- Results Section -->
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <div class="results-container">
+                    <button class="btn btn-secondary" onclick="resetForm()">← Back</button>
+                    
+                    <div class="match-score">
+                        <div class="score-circle" id="scoreCircle">
+                            <span id="scorePercentage">0%</span>
+                        </div>
+                        <h2>Resume Match Score</h2>
+                        <p>How well your resume aligns with the job description</p>
+                    </div>
+
+                    <div class="keywords-section">
+                        <h3>Matched Keywords</h3>
+                        <div class="keywords-list" id="matchedKeywords"></div>
+
+                        <h3>Missing Keywords (Add These!)</h3>
+                        <div class="keywords-list missing" id="missingKeywords"></div>
+                    </div>
+
+                    <div class="recommendations-section">
+                        <h2>Recommendations</h2>
+                        <div id="recommendationsList"></div>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="resetForm()">Analyze Another Resume</button>
                 </div>
             </section>
+
         </main>
 
         <!-- Footer -->
@@ -76,5 +82,115 @@
             <p>&copy; 2026 Resume Tester. All rights reserved.</p>
         </footer>
     </div>
+
+    <script>
+        const API_URL = 'http://localhost:5000';
+
+        // File input change handler
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const fileName = e.target.files[0].name;
+            document.getElementById('fileName').textContent = '✓ ' + fileName;
+        });
+
+        async function analyzeResume() {
+            const fileInput = document.getElementById('fileInput');
+            const jobDescription = document.getElementById('jobDescription').value;
+
+            // Validation
+            if (!fileInput.files.length) {
+                alert('Please select a resume file');
+                return;
+            }
+
+            if (!jobDescription.trim()) {
+                alert('Please paste a job description');
+                return;
+            }
+
+            // Show loading spinner
+            document.getElementById('loadingSpinner').style.display = 'block';
+            
+            // Create FormData
+            const formData = new FormData();
+            formData.append('resume', fileInput.files[0]);
+            formData.append('job_description', jobDescription);
+
+            try {
+                const response = await fetch(`${API_URL}/analyze`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Analysis failed');
+                }
+
+                const data = await response.json();
+                displayResults(data);
+            } catch (error) {
+                alert('Error analyzing resume: ' + error.message);
+                console.error(error);
+            } finally {
+                document.getElementById('loadingSpinner').style.display = 'none';
+            }
+        }
+
+        function displayResults(data) {
+            // Update score
+            const percentage = data.match_percentage;
+            document.getElementById('scorePercentage').textContent = percentage + '%';
+            
+            // Update score circle color based on percentage
+            const scoreCircle = document.getElementById('scoreCircle');
+            if (percentage >= 70) {
+                scoreCircle.classList.add('good');
+            } else if (percentage >= 50) {
+                scoreCircle.classList.add('fair');
+            } else {
+                scoreCircle.classList.add('poor');
+            }
+
+            // Display matched keywords
+            const matchedContainer = document.getElementById('matchedKeywords');
+            matchedContainer.innerHTML = data.matched_keywords.map(kw => 
+                `<span class="keyword matched">${kw}</span>`
+            ).join('');
+
+            // Display missing keywords
+            const missingContainer = document.getElementById('missingKeywords');
+            missingContainer.innerHTML = data.missing_keywords.map(kw => 
+                `<span class="keyword missing">${kw}</span>`
+            ).join('');
+
+            // Display recommendations
+            const recommendationsContainer = document.getElementById('recommendationsList');
+            recommendationsContainer.innerHTML = data.recommendations.map(rec => `
+                <div class="recommendation-card ${rec.priority}">
+                    <div class="rec-priority">Priority: ${rec.priority.toUpperCase()}</div>
+                    <h4>${rec.title}</h4>
+                    <p>${rec.description}</p>
+                    <div class="rec-action">
+                        <strong>Action:</strong> ${rec.action}
+                    </div>
+                </div>
+            `).join('');
+
+            // Hide upload section, show results
+            document.getElementById('uploadSection').style.display = 'none';
+            document.getElementById('resultsSection').style.display = 'block';
+        }
+
+        function resetForm() {
+            document.getElementById('fileInput').value = '';
+            document.getElementById('jobDescription').value = '';
+            document.getElementById('fileName').textContent = '';
+            document.getElementById('uploadSection').style.display = 'block';
+            document.getElementById('resultsSection').style.display = 'none';
+            
+            // Reset score circle classes
+            const scoreCircle = document.getElementById('scoreCircle');
+            scoreCircle.classList.remove('good', 'fair', 'poor');
+        }
+    </script>
 </body>
 </html>
